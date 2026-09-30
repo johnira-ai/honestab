@@ -15,6 +15,8 @@ src/honestab/
 tests/
   test_calibration.py  # simulation-based calibration tests
   test_analyze.py      # reference-value and input-validation unit tests
+scripts/
+  calibration_figure.py  # regenerates the README chart in docs/images/
 .github/workflows/tests.yml  # CI: lint, format, mypy, build; tests on a
                              # Python/OS matrix and on lowest dependencies
 .github/dependabot.yml       # monthly updates for actions and uv.lock
@@ -23,7 +25,7 @@ tests/
 ## Tooling
 
 - Package and environment management: `uv` (Python 3.11+)
-- Install: `uv sync` (dependency groups: `test`, `lint`; `dev` includes both)
+- Install: `uv sync` (dependency groups: `test`, `lint`, `docs`; `dev` includes all)
 - Lint: `uv run ruff check` (config in `pyproject.toml`, line length 88)
 - Format: `uv run ruff format`
 - Type check: `uv run mypy` (strict, covers `src` and `tests`)

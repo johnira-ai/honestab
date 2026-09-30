@@ -46,9 +46,13 @@ lint = [
     "ruff>=0.6",
     "scipy-stubs>=1.15",
 ]
+docs = [
+    "matplotlib>=3.8",
+]
 dev = [
     { include-group = "test" },
     { include-group = "lint" },
+    { include-group = "docs" },
 ]
 
 [tool.ruff]
@@ -76,7 +80,7 @@ ignore = [
 
 [tool.mypy]
 strict = true
-files = ["src", "tests"]
+files = ["src", "tests", "scripts"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"

@@ -34,6 +34,16 @@ Calibration testing checks the promises directly:
 
 If a method can't pass that, its error bars aren't honest, and it doesn't ship.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/calibration-dark.png">
+  <img alt="Two calibration charts. Left: confidence interval coverage for a binary metric with a 2% baseline, from 25 to 2,000 users per arm. The textbook Wald interval covers the true effect only 71% of the time at 25 users per arm and 89% at 50, while honestab's Newcombe interval stays at or above the nominal 95% at every sample size. Right: a histogram of Welch's t-test p-values from 10,000 A/A tests, flat across 0 to 1 as expected." src="docs/images/calibration-light.png">
+</picture>
+
+The left chart is why honestab uses the Newcombe interval: the textbook Wald
+interval, found in most A/B testing tutorials, quietly under-covers when
+samples are small or conversions are rare. Regenerate both charts with
+`uv run python scripts/calibration_figure.py`.
+
 ## Installation
 
 honestab uses [uv](https://docs.astral.sh/uv/) and requires Python 3.11+.
