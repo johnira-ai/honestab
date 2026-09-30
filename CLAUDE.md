@@ -12,9 +12,13 @@ src/honestab/
   __init__.py     # public API
   simulate.py     # simulate A/B experiments with known true effects
   analyze.py      # statistical analysis of experiment data
+  planning.py     # power, sample size, minimum detectable effect
+  srm.py          # sample ratio mismatch check
 tests/
   test_calibration.py  # simulation-based calibration tests
   test_analyze.py      # reference-value and input-validation unit tests
+  test_planning.py     #   (one unit-test module per source module)
+  test_srm.py
 scripts/
   calibration_figure.py  # regenerates the README chart in docs/images/
 .github/workflows/tests.yml  # CI: lint, format, mypy, build; tests on a
