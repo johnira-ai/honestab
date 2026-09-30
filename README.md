@@ -56,6 +56,44 @@ uv sync
 
 ## Usage
 
+A typical experiment goes through three steps: size it, check that traffic
+was split as designed, then analyze the result.
+
+### 1. Plan: how many users do you need?
+
+```python
+from honestab import minimum_detectable_effect, power, sample_size
+
+# Users per arm to detect a lift from 10% to 12% with 80% power at alpha = 0.05.
+sample_size(0.02, baseline=0.10)  # 3841
+
+# Smallest lift 5,000 users per arm can detect with 80% power.
+minimum_detectable_effect(5_000, baseline=0.10)  # 0.0174 -> 1.7 points
+
+# Chance of detecting a 2-point lift with only 2,000 users per arm.
+power(2_000, 0.02, baseline=0.10)  # 0.52
+```
+
+The formulas model the exact tests `analyze()` runs, and the calibration suite
+checks that experiments sized this way detect the effect as often as promised.
+Pass `metric="continuous", sd=...` for continuous metrics.
+
+### 2. Check: was traffic split as designed?
+
+```python
+from honestab import srm_check
+
+srm_check(df)  # designed 50/50; use expected_share=0.1 for a 90/10 split
+# SRM check: sample ratio mismatch (treatment share 0.5059, expected 0.5000, p = 0.0001618)
+```
+
+A sample ratio mismatch (here, 50,000 vs 51,200 users) means assignment or
+logging is broken, so the effect estimate can't be trusted however small its
+p-value. The default threshold is `alpha = 0.001`, because the check runs on
+every experiment and false alarms need to be rare.
+
+### 3. Analyze
+
 ```python
 from honestab import analyze, simulate
 
@@ -95,6 +133,10 @@ Supported methods:
 | `binary`     | Two-proportion z-test (pooled SE)      | Newcombe hybrid score interval    |
 | `continuous` | Welch's t-test (unequal variances)     | Welch interval                    |
 
+Sample ratio mismatch uses a chi-square goodness-of-fit test. Power and sample
+size use the normal approximation to the pooled z-test (binary) and the
+noncentral t distribution (continuous), assuming equal arm sizes.
+
 The Newcombe interval is used instead of the textbook Wald interval because
 Wald under-covers with small samples or rare events (about 93% coverage for a
 nominal 95% interval at 100 users per arm and a 2% baseline).
@@ -118,12 +160,16 @@ experiments per check and verifies, for both binary and continuous metrics:
 
 It also checks that the binary interval never under-covers in a small-sample,
 rare-event setting (5,000 experiments with 100 users per arm), where discrete
-outcomes make exact nominal coverage impossible.
+outcomes make exact nominal coverage impossible; that experiments sized with
+`sample_size()` detect the effect at the promised rate when analyzed with
+`analyze()`; and that `srm_check()` raises false alarms at rate `alpha` under
+correct randomization and catches real mismatches as often as theory predicts.
 
 Tolerances are Monte Carlo bands of four binomial standard errors, and seeds
-are fixed so results are reproducible. `tests/test_analyze.py` pins results
-against independent reference implementations (scipy, statsmodels) and checks
-that invalid input fails loudly.
+are fixed so results are reproducible. The unit tests (`test_analyze.py`,
+`test_planning.py`, `test_srm.py`) pin results against independent reference
+implementations (scipy, statsmodels, textbook closed forms) and check that
+invalid input fails loudly.
 
 CI runs lint, formatting, strict type checking and a package build, and runs the
 tests on Python 3.11–3.14 on Linux, on Windows and macOS, and against the
@@ -133,11 +179,11 @@ lowest supported versions of numpy, pandas and scipy.
 
 Each item will ship with its own calibration test.
 
-- [ ] **SRM checks**: detect sample ratio mismatch before trusting results
+- [x] **SRM checks**: detect sample ratio mismatch before trusting results
 - [ ] **CUPED**: variance reduction using pre-experiment covariates
 - [ ] **Delta method**: correct standard errors for ratio metrics (e.g. revenue per session)
 - [ ] **Sequential testing**: valid inference when peeking at results early
-- [ ] **Power analysis**: sample size and minimum detectable effect calculations
+- [x] **Power analysis**: sample size and minimum detectable effect calculations
 - [ ] **Segment analysis**: per-segment effects with multiple comparison control
 - [ ] **Streamlit dashboard**: interactive analysis and calibration reports
 
