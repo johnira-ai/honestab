@@ -10,11 +10,13 @@ Tolerances are Monte Carlo bands: an observed rate must fall within
 results are reproducible.
 """
 
+from typing import Any
+
 import numpy as np
 import pytest
 from scipy import stats
 
-from honestab import analyze, simulate
+from honestab import AnalysisResult, analyze, simulate
 
 N_SIMS = 2_000
 N_PER_ARM = 2_000
@@ -22,22 +24,42 @@ ALPHA = 0.05
 Z_TOL = 4.0  # a correct method falls outside this band ~6 times in 100,000
 
 
-def run_experiments(seed: int, **sim_kwargs):
-    """Simulate and analyze N_SIMS independent experiments."""
+def run_experiments(
+    seed: int,
+    n_per_arm: int = N_PER_ARM,
+    n_sims: int = N_SIMS,
+    **sim_kwargs: Any,
+) -> list[AnalysisResult]:
+    """Simulate and analyze ``n_sims`` independent experiments."""
     rngs = [
-        np.random.default_rng(s) for s in np.random.SeedSequence(seed).spawn(N_SIMS)
+        np.random.default_rng(s) for s in np.random.SeedSequence(seed).spawn(n_sims)
     ]
     return [
-        analyze(simulate(N_PER_ARM, seed=rng, **sim_kwargs), alpha=ALPHA)
+        analyze(simulate(n_per_arm, seed=rng, **sim_kwargs), alpha=ALPHA)
         for rng in rngs
     ]
 
 
-def assert_rate_close(observed: float, nominal: float, what: str) -> None:
-    se = np.sqrt(nominal * (1 - nominal) / N_SIMS)
-    assert abs(observed - nominal) <= Z_TOL * se, (
+def monte_carlo_tolerance(nominal: float, n_sims: int) -> float:
+    return float(Z_TOL * np.sqrt(nominal * (1 - nominal) / n_sims))
+
+
+def assert_rate_close(
+    observed: float, nominal: float, what: str, n_sims: int = N_SIMS
+) -> None:
+    tol = monte_carlo_tolerance(nominal, n_sims)
+    assert abs(observed - nominal) <= tol, (
+        f"{what}: observed {observed:.4f}, nominal {nominal:.4f}, allowed ±{tol:.4f}"
+    )
+
+
+def assert_rate_at_least(
+    observed: float, nominal: float, what: str, n_sims: int = N_SIMS
+) -> None:
+    tol = monte_carlo_tolerance(nominal, n_sims)
+    assert observed >= nominal - tol, (
         f"{what}: observed {observed:.4f}, nominal {nominal:.4f}, "
-        f"allowed ±{Z_TOL * se:.4f}"
+        f"allowed down to {nominal - tol:.4f}"
     )
 
 
@@ -45,10 +67,10 @@ def assert_rate_close(observed: float, nominal: float, what: str) -> None:
     ("metric", "baseline"),
     [("binary", 0.10), ("continuous", 50.0)],
 )
-def test_false_positive_rate_matches_alpha(metric, baseline):
+def test_false_positive_rate_matches_alpha(metric: str, baseline: float) -> None:
     """Under an A/A test, the test should reject about ALPHA of the time."""
     results = run_experiments(seed=1, metric=metric, baseline=baseline, sd=20.0)
-    rejection_rate = np.mean([r.p_value < ALPHA for r in results])
+    rejection_rate = float(np.mean([r.p_value < ALPHA for r in results]))
     assert_rate_close(rejection_rate, ALPHA, f"{metric} type I error")
 
 
@@ -56,18 +78,47 @@ def test_false_positive_rate_matches_alpha(metric, baseline):
     ("metric", "baseline", "effect"),
     [("binary", 0.10, 0.01), ("continuous", 50.0, 1.5)],
 )
-def test_confidence_interval_coverage(metric, baseline, effect):
+def test_confidence_interval_coverage(
+    metric: str, baseline: float, effect: float
+) -> None:
     """With a real effect, the CI should contain it about 1 - ALPHA of the time."""
     results = run_experiments(
         seed=2, metric=metric, baseline=baseline, effect=effect, sd=20.0
     )
-    coverage = np.mean([r.ci_low <= effect <= r.ci_high for r in results])
+    coverage = float(np.mean([r.ci_low <= effect <= r.ci_high for r in results]))
     assert_rate_close(coverage, 1 - ALPHA, f"{metric} CI coverage")
 
 
-def test_p_values_uniform_under_null():
+def test_binary_confidence_interval_coverage_small_sample() -> None:
+    """With few units and a rare event, the binary CI must not under-cover.
+
+    Outcomes are discrete here, so no interval can hit 1 - ALPHA exactly; an
+    honest one errs on the side of covering more often. The Wald interval
+    fails this check (coverage about 0.93).
+    """
+    n_sims = 5_000
+    effect = 0.01
+    results = run_experiments(
+        seed=4,
+        n_per_arm=100,
+        n_sims=n_sims,
+        metric="binary",
+        baseline=0.02,
+        effect=effect,
+    )
+    coverage = float(np.mean([r.ci_low <= effect <= r.ci_high for r in results]))
+    assert_rate_at_least(
+        coverage, 1 - ALPHA, "small-sample binary CI coverage", n_sims=n_sims
+    )
+
+
+@pytest.mark.parametrize(
+    ("metric", "baseline"),
+    [("binary", 0.10), ("continuous", 50.0)],
+)
+def test_p_values_uniform_under_null(metric: str, baseline: float) -> None:
     """Under the null, the whole p-value distribution should be Uniform(0, 1)."""
-    results = run_experiments(seed=3, metric="continuous", baseline=50.0, sd=20.0)
+    results = run_experiments(seed=3, metric=metric, baseline=baseline, sd=20.0)
     p_values = np.array([r.p_value for r in results])
     ks = stats.kstest(p_values, "uniform")
     assert ks.pvalue > 0.001, f"p-values not uniform (KS p = {ks.pvalue:.2e})"
