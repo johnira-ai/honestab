@@ -57,7 +57,7 @@ print(result)
 # two-proportion z-test: effect = +0.0132 (95% CI [+0.0047, +0.0217]), p = 0.002339
 
 result.relative_lift  # 0.134 -> +13.4% relative to control
-result.significant    # True
+result.significant  # True
 ```
 
 `simulate()` returns a DataFrame with `group` and `value` columns, and records
@@ -65,22 +65,38 @@ the ground truth in `df.attrs["true_effect"]`. `analyze()` works on any
 DataFrame in that shape, so you can pass it real experiment data too:
 
 ```python
-result = analyze(my_df, metric="continuous", group_col="variant",
-                 value_col="revenue", control="A", treatment="B")
+result = analyze(
+    my_df,
+    metric="continuous",
+    group_col="variant",
+    value_col="revenue",
+    control="A",
+    treatment="B",
+)
 ```
+
+Missing outcomes raise an error rather than silently skewing the result; pass
+`nan_policy="omit"` to drop them instead.
 
 Supported methods:
 
-| Metric       | Test                                   | Confidence interval         |
-| ------------ | -------------------------------------- | --------------------------- |
-| `binary`     | Two-proportion z-test (pooled SE)      | Wald interval (unpooled SE) |
-| `continuous` | Welch's t-test (unequal variances)     | Welch interval              |
+| Metric       | Test                                   | Confidence interval               |
+| ------------ | -------------------------------------- | --------------------------------- |
+| `binary`     | Two-proportion z-test (pooled SE)      | Newcombe hybrid score interval    |
+| `continuous` | Welch's t-test (unequal variances)     | Welch interval                    |
 
-## Running the tests
+The Newcombe interval is used instead of the textbook Wald interval because
+Wald under-covers with small samples or rare events (about 93% coverage for a
+nominal 95% interval at 100 users per arm and a 2% baseline).
+
+## Development
 
 ```bash
-uv run ruff check
-uv run pytest
+uv sync                    # install the package and dev tools
+uv run ruff check          # lint
+uv run ruff format --check # formatting
+uv run mypy                # type check (strict)
+uv run pytest              # tests
 ```
 
 The calibration suite in `tests/test_calibration.py` runs 2,000 simulated
@@ -90,8 +106,18 @@ experiments per check and verifies, for both binary and continuous metrics:
 - confidence intervals cover the true effect at the nominal rate;
 - p-values are uniform under the null (Kolmogorov–Smirnov test).
 
+It also checks that the binary interval never under-covers in a small-sample,
+rare-event setting (5,000 experiments with 100 users per arm), where discrete
+outcomes make exact nominal coverage impossible.
+
 Tolerances are Monte Carlo bands of four binomial standard errors, and seeds
-are fixed so results are reproducible.
+are fixed so results are reproducible. `tests/test_analyze.py` pins results
+against independent reference implementations (scipy, statsmodels) and checks
+that invalid input fails loudly.
+
+CI runs lint, formatting, strict type checking and a package build, and runs the
+tests on Python 3.11–3.14 on Linux, on Windows and macOS, and against the
+lowest supported versions of numpy, pandas and scipy.
 
 ## Roadmap
 

@@ -14,15 +14,21 @@ src/honestab/
   analyze.py      # statistical analysis of experiment data
 tests/
   test_calibration.py  # simulation-based calibration tests
-.github/workflows/tests.yml  # CI: uv sync, ruff check, pytest
+  test_analyze.py      # reference-value and input-validation unit tests
+.github/workflows/tests.yml  # CI: lint, format, mypy, build; tests on a
+                             # Python/OS matrix and on lowest dependencies
+.github/dependabot.yml       # monthly updates for actions and uv.lock
 ```
 
 ## Tooling
 
 - Package and environment management: `uv` (Python 3.11+)
-- Install: `uv sync`
+- Install: `uv sync` (dependency groups: `test`, `lint`; `dev` includes both)
 - Lint: `uv run ruff check` (config in `pyproject.toml`, line length 88)
-- Test: `uv run pytest`
+- Format: `uv run ruff format`
+- Type check: `uv run mypy` (strict, covers `src` and `tests`)
+- Test: `uv run pytest` (warnings are errors)
+- After changing dependencies, run `uv lock`; CI uses `uv sync --locked`.
 
 ## The rule
 
